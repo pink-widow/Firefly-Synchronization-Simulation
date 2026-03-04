@@ -1,5 +1,3 @@
-# Firefly-Synchronization-Simulation
-
 # Firefly Synchronization Simulation
 
 This project simulates the emergent synchronization behavior of fireflies based on their biological clock dynamics and mutual influence through neighbor interactions. The model is inspired by natural phenomena such as synchronized flashing observed in real firefly swarms, where individual fireflies adjust their internal clocks in response to nearby flashes, leading to collective order without a central coordinator. I implemented this simulation using Python with NumPy for numerical computations, Matplotlib for visualization, and ImageIO for creating animations.

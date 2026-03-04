@@ -1,0 +1,177 @@
+#cell 1
+import numpy as np
+import matplotlib.pyplot as plt
+import imageio
+from tqdm.notebook import tqdm
+
+
+
+#cell 2
+def order_parameter(phases):
+    return np.abs(np.mean(np.exp(2j * np.pi * phases)))
+
+def build_neighbors(N, M, r, periodic=True):  #r interaction radius; only nodes within distance ≤ r are neighbors
+    """Return neighbor lists for each node in an N×M grid"""
+    positions = np.array([(i, j) for i in range(N) for j in range(M)])
+    neighbors = []
+    for idx, (x, y) in enumerate(positions):
+        dists = np.sqrt((positions[:,0] - x)**2 + (positions[:,1] - y)**2)
+        if periodic:
+            dx = np.minimum(np.abs(positions[:,0]-x), N - np.abs(positions[:,0]-x))
+            dy = np.minimum(np.abs(positions[:,1]-y), M - np.abs(positions[:,1]-y))
+            dists = np.sqrt(dx**2 + dy**2)
+        nbrs = np.where((dists > 0) & (dists <= r))[0]
+        neighbors.append(nbrs)
+    return neighbors
+
+
+
+#cell 3
+def simulate_fireflies(N, M, r, CouplingValue, timestepsPerPeriod=100, total_periods=15,
+                       periodic=True, seed=None, record_states=False):
+    if seed is not None:
+        np.random.seed(seed)
+    
+    n_nodes = N * M
+    neighbors = build_neighbors(N, M, r, periodic=periodic)
+    
+    phases = np.random.rand(n_nodes)
+    total_steps = timestepsPerPeriod * total_periods
+    dt = 1.0 / timestepsPerPeriod
+    R_t = []
+    frames = []
+
+    for t in range(total_steps):
+        flashed = np.zeros(n_nodes, dtype=bool)  #keeps track of nodes that have already flashed this timestep.
+        phases += dt #all nodes advance naturally in phase.
+
+        # Cascade loop
+        while True:
+            new_flash = (phases >= 1.0) & (~flashed)  #Any node with phase >= 1.0 and hasn’t flashed yet.
+            if not np.any(new_flash):
+                break
+            flashed[new_flash] = True
+            phases[new_flash] = 0.0
+            for idx in np.where(new_flash)[0]:
+                phases[neighbors[idx]] += CouplingValue #For each newly flashed node, increment the phases of its neighbors by CouplingValue
+
+        R_t.append(order_parameter(phases))
+
+        if record_states:
+            # Save a grayscale frame
+            frames.append(phases.reshape(N, M).copy())
+
+    return np.arange(total_steps), np.array(R_t), phases, frames
+
+
+
+#cell 4
+N, M = 20, 20
+r = 1.5
+CouplingValue = 0.08
+timestepsPerPeriod = 100
+total_periods = 15
+
+times, R_t, final_phases, _ = simulate_fireflies(N, M, r, CouplingValue, timestepsPerPeriod, total_periods)
+
+plt.figure(figsize=(6,4))
+plt.plot(times, R_t, label=f'r={r}, K={CouplingValue}')
+plt.xlabel('Time step')
+plt.ylabel('Order parameter R(t)')
+plt.title('Firefly Synchronization Example')
+plt.legend()
+plt.show()
+
+#at early timesteps R(t) is low so phases are random.
+#As flashes propagate R(t) gradually increases and With enough coupling, R(t)shows emergent synchronization.
+
+
+
+#cell 5
+r_values = [0.5, 1.5, 3.0]
+plt.figure(figsize=(6,4))
+
+for r in r_values:
+    times, R_t, _, _ = simulate_fireflies(N, M, r, CouplingValue, timestepsPerPeriod, total_periods, seed=42)
+    plt.plot(times, R_t, label=f'r={r}')
+
+plt.xlabel('Time step')
+plt.ylabel('Order parameter R(t)')
+plt.title('Sweep: Neighborhood radius')
+plt.legend()
+plt.show()
+
+#for small r(0.5) we have very local coupling so slower synchronization and smaller maximum value of R(t).
+#for moderate r(1.5) we have faster and stronger synchronization.
+#for Large r(3.0) most fireflies interact and we almost have instantaneous synchronization.
+
+
+
+#cell 6
+K_values = [0.02, 0.08, 0.2]
+r = 1.5
+plt.figure(figsize=(6,4))
+
+for K in K_values:
+    times, R_t, _, _ = simulate_fireflies(N, M, r, K, timestepsPerPeriod, total_periods, seed=42)
+    plt.plot(times, R_t, label=f'K={K}')
+
+plt.xlabel('Time step')
+plt.ylabel('Order parameter R(t)')
+plt.title('Sweep: Coupling Value')
+plt.legend()
+plt.show()
+
+#for low K(0.02) we have weak interactions and slow synchronization and R(t) rises slowly and may not reach 1.
+#for moderate K(0.08)we have faster synchronization.
+#for high K(0.2) we have very fast synchronization and R(t) approaches 1 quickly.
+
+
+
+#cell 7
+grid_sizes = [(10,10), (20,20), (40,40)]
+r = 1.5
+CouplingValue = 0.08
+plt.figure(figsize=(6,4))
+
+for N, M in grid_sizes:
+    times, R_t, _, _ = simulate_fireflies(N, M, r, CouplingValue, timestepsPerPeriod, total_periods, seed=42)
+    plt.plot(times, R_t, label=f'{N}x{M}')
+
+plt.xlabel('Time step')
+plt.ylabel('Order parameter R(t)')
+plt.title('Sweep: Grid size')
+plt.legend()
+plt.show()
+
+#for small grid (10×10) synchronization is faster because fewer fireflies need to align.
+#for medium grid (20×20) synchronization takes longer.
+#for large grid (40×40) we  have slower initial synchronization, and it may take more time for R(t) to reach near 1.
+#bcs larger networks have more nodes, so cascades take longer to propagate globally.
+
+
+
+#cell 8
+N, M = 20, 20
+r = 1.5
+CouplingValue = 0.08
+_, _, _, frames = simulate_fireflies(N, M, r, CouplingValue, timestepsPerPeriod, total_periods, record_states=True)
+
+
+images = []
+fig, ax = plt.subplots(figsize=(4,4))
+for frame in frames:
+    ax.clear()
+    im = ax.imshow(frame, cmap='viridis', vmin=0, vmax=1)
+    ax.axis('off')
+    # Render figure to RGB array
+    fig.canvas.draw()
+    image = np.array(fig.canvas.renderer.buffer_rgba())[:,:,:3]
+    images.append(image)
+plt.close(fig)
+
+buf = io.BytesIO()
+imageio.mimsave(buf, images, format='GIF', duration=0.05)
+buf.seek(0)
+
+display(Image(data=buf.read()))
